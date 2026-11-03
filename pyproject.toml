@@ -7,7 +7,7 @@ name = "p2p-sync-engine"
 version = "0.1.0"
 description = "Generic procure-to-pay sync engine for procurement, ERP and maintenance systems."
 readme = "README.md"
-license = "MIT"
+license = "LicenseRef-Proprietary"
 license-files = ["LICENSE"]
 authors = [{ name = "Sidney Buenaventura" }]
 requires-python = ">=3.12"
