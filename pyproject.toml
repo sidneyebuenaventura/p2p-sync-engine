@@ -7,7 +7,7 @@ name = "p2p-sync-engine"
 version = "0.1.0"
 description = "Generic procure-to-pay sync engine for procurement, ERP and maintenance systems."
 readme = "README.md"
-license = "MIT"
+license = "LicenseRef-Proprietary"
 license-files = ["LICENSE"]
 authors = [{ name = "Sidney Buenaventura" }]
 requires-python = ">=3.12"
@@ -17,15 +17,28 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
     "Typing :: Typed",
 ]
-dependencies = []
+dependencies = [
+    "croniter>=6.0",
+    "pydantic>=2.8",
+    "pydantic-settings>=2.4",
+    "requests>=2.32",
+    "tzdata; sys_platform == 'win32'",  # Windows ships without the IANA time zone database
+]
 
 [project.optional-dependencies]
+azure = [
+    "azure-identity>=1.17",
+    "azure-keyvault-secrets>=4.8",
+]
 dev = [
     "mypy>=1.11",
     "pre-commit>=3.8",
     "pytest>=8.3",
     "pytest-cov>=5.0",
+    "responses>=0.25",
     "ruff>=0.6",
+    "types-croniter",
+    "types-requests>=2.32",
 ]
 
 [tool.hatch.build.targets.wheel]
@@ -63,11 +76,21 @@ strict = true
 mypy_path = "src"
 packages = ["p2p_sync"]
 warn_unreachable = true
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = ["azure.*"]  # optional extra; may not be installed where mypy runs
+ignore_missing_imports = true
+
+[tool.pydantic-mypy]
+init_forbid_extra = true
+init_typed = true
+warn_required_dynamic_aliases = true
 
 # --- pytest ----------------------------------------------------------------
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = ["-ra", "--strict-markers", "--strict-config"]
+addopts = ["-ra", "--strict-markers", "--strict-config", "--import-mode=importlib"]
 xfail_strict = true
 
 [tool.coverage.run]
