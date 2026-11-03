@@ -11,4 +11,5 @@ systems in step:
 
 ## License
 
-[MIT](LICENSE)
+All rights reserved. The code is public so you can read it, but please ask before
+reusing any of it. See [LICENSE](LICENSE).
