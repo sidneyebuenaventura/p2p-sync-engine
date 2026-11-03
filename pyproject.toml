@@ -18,6 +18,7 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
+    "croniter>=6.0",
     "pydantic>=2.8",
     "pydantic-settings>=2.4",
     "requests>=2.32",
@@ -36,6 +37,7 @@ dev = [
     "pytest-cov>=5.0",
     "responses>=0.25",
     "ruff>=0.6",
+    "types-croniter",
     "types-requests>=2.32",
 ]
 
