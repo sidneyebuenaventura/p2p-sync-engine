@@ -3,7 +3,10 @@
 from p2p_sync.flows.suppliers import (
     PAYMENT_TERMS,
     MappingError,
+    SupplierContractorSync,
     SupplierVendorSync,
+    contractor_code,
+    contractor_draft,
     supplier_ref,
     suppliers_to_sync,
     vendor_draft,
@@ -12,7 +15,10 @@ from p2p_sync.flows.suppliers import (
 __all__ = [
     "PAYMENT_TERMS",
     "MappingError",
+    "SupplierContractorSync",
     "SupplierVendorSync",
+    "contractor_code",
+    "contractor_draft",
     "supplier_ref",
     "suppliers_to_sync",
     "vendor_draft",

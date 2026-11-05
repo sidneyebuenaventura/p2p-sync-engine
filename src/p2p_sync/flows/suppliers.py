@@ -1,17 +1,20 @@
 """Push procurement suppliers out to the other systems.
 
 Procurement is where suppliers get onboarded and approved, so it owns their details.
-Copies are linked back by the procurement supplier id: external_ref on an ERP vendor.
+Copies are linked back by the procurement supplier id: external_ref on an ERP vendor,
+procurement_supplier_id on a maintenance contractor.
 """
 
 from __future__ import annotations
 
 import logging
-from collections.abc import Iterable, Mapping
+from collections import defaultdict
+from collections.abc import Callable, Iterable, Mapping
 
 from pydantic import ValidationError
 
 from p2p_sync.connectors.erp import ErpAddress, ErpClient, Vendor, VendorBank, VendorDraft
+from p2p_sync.connectors.maintenance import Contractor, ContractorDraft, MaintenanceClient
 from p2p_sync.connectors.procurement import (
     Address,
     BankAccount,
@@ -62,6 +65,21 @@ def vendor_draft(supplier: Supplier, payment_terms: Mapping[str, str] = PAYMENT_
         bank=_vendor_bank(supplier.bank_account),
         active=supplier.status is SupplierStatus.ACTIVE,
         external_ref=supplier_ref(supplier.id),
+    )
+
+
+def contractor_code(supplier: Supplier) -> str:
+    return f"PS{supplier.id:06d}"
+
+
+def contractor_draft(supplier: Supplier, *, code: str) -> ContractorDraft:
+    return ContractorDraft(
+        code=code,
+        name=supplier.name,
+        tax_id=supplier.tax_id,
+        email=supplier.email,
+        active=supplier.status is SupplierStatus.ACTIVE,
+        procurement_supplier_id=supplier.id,
     )
 
 
@@ -165,3 +183,76 @@ class SupplierVendorSync:
         self.procurement.set_integration_status(
             "suppliers", result.source.id, IntegrationStatus.ERROR, f"ERP vendor sync: {_problem(result)}"
         )
+
+
+class SupplierContractorSync:
+    # Problems here only go to the log and the report. The integration status on the
+    # procurement supplier belongs to the ERP sync, which is the one AP keeps an eye on.
+
+    def __init__(
+        self,
+        procurement: ProcurementClient,
+        maintenance: MaintenanceClient,
+        *,
+        wanted: Callable[[Supplier], bool] | None = None,
+        dry_run: bool = False,
+    ) -> None:
+        self.procurement = procurement
+        self.maintenance = maintenance
+        # Not every supplier works on site; e.g. wanted=lambda s: s.id in field_service_ids
+        self.wanted = wanted
+        self.dry_run = dry_run
+        self._unlinked: dict[str, list[Contractor]] = {}
+
+    def run(self, suppliers: Iterable[Supplier] | None = None) -> SyncReport[Supplier, Contractor]:
+        contractors = self.maintenance.contractors(active_only=False)
+        linked = {c.procurement_supplier_id for c in contractors}
+        candidates = list(suppliers) if suppliers is not None else suppliers_to_sync(self.procurement)
+        sources = [s for s in candidates if self._in_scope(s, linked)]
+
+        unlinked: defaultdict[str, list[Contractor]] = defaultdict(list)
+        for contractor in contractors:
+            if contractor.procurement_supplier_id is None and contractor.tax_id:
+                unlinked[contractor.tax_id].append(contractor)
+        self._unlinked = unlinked
+
+        engine = SyncEngine(
+            KeyMatcher[Supplier, Contractor](lambda s: s.id, lambda c: c.procurement_supplier_id),
+            create=self._create,
+            update=self._update,
+            needs_update=self._needs_update,
+            dry_run=self.dry_run,
+            logger=logger,
+        )
+        with log_context(flow="supplier-contractor"):
+            return engine.run(sources, contractors)
+
+    def _in_scope(self, supplier: Supplier, linked: set[int | None]) -> bool:
+        if self.wanted is not None and not self.wanted(supplier):
+            return False
+        # an inactive supplier only matters if it has a contractor to switch off
+        return supplier.status is SupplierStatus.ACTIVE or supplier.id in linked
+
+    def _create(self, supplier: Supplier) -> Contractor:
+        # same idea as the ERP: adopt a contractor set up by hand with the same tax id
+        unlinked = self._unlinked.get(supplier.tax_id or "", [])
+        if len(unlinked) > 1:
+            raise P2PSyncError(f"{len(unlinked)} unlinked contractors have tax id {supplier.tax_id}")
+        if unlinked:
+            existing = unlinked.pop()
+            logger.info("linking supplier %s to existing contractor %s", supplier.id, existing.code)
+            return self.maintenance.update_contractor(
+                existing.id, contractor_draft(supplier, code=existing.code)
+            )
+        return self.maintenance.create_contractor(contractor_draft(supplier, code=contractor_code(supplier)))
+
+    def _update(self, supplier: Supplier, contractor: Contractor) -> Contractor:
+        # keep the contractor's code; people on the maintenance side know them by it
+        draft = contractor_draft(supplier, code=contractor.code)
+        return self.maintenance.update_contractor(contractor.id, draft)
+
+    def _needs_update(self, supplier: Supplier, contractor: Contractor) -> bool:
+        current = ContractorDraft.model_validate(
+            contractor.model_dump(include=set(ContractorDraft.model_fields))
+        )
+        return contractor_draft(supplier, code=contractor.code) != current
