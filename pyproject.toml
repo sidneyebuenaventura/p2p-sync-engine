@@ -22,6 +22,7 @@ dependencies = [
     "pydantic>=2.8",
     "pydantic-settings>=2.4",
     "requests>=2.32",
+    "sqlalchemy>=2.0",
     "tzdata; sys_platform == 'win32'",  # Windows ships without the IANA time zone database
 ]
 
