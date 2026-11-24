@@ -94,7 +94,9 @@ def test_invoice_sync(demo: Demo, capsys: pytest.CaptureFixture[str]) -> None:
 
     assert cli.main(["invoices"]) == cli.EXIT_PROBLEMS
 
-    assert "invoices -> erp: create=1 update=0 skip=2 conflict=0 failed=2" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "invoices -> erp: create=1 update=0 skip=1 conflict=0 failed=3" in out
+    assert "invoice BE-7790 (id 104): already in ERP as AP invoice 1002" in out
 
     # AP-24017 posts; its labour line had no account code and got the default
     assert demo.invoice_status(101) == ("success", "ERP AP invoice 1003")

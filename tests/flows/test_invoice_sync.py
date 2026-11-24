@@ -130,13 +130,15 @@ def test_hand_keyed_invoice_with_different_total_needs_a_person(
 ) -> None:
     erp_with_vendor.ap_invoice_list = [hand_keyed("INV-1", total="400.00")]
 
-    sync.run([make_invoice(1)])
+    report = sync.run([make_invoice(1)])
 
     assert erp_with_vendor.posted == []
     assert procurement.exported_invoices == []
-    status, message = procurement.statuses[("invoices", 1)]
-    assert status is IntegrationStatus.ERROR
-    assert message == "already in ERP as AP invoice 42 with total 400.00, procurement has 336.00"
+    message = "already in ERP as AP invoice 42 with total 400.00, procurement has 336.00"
+    assert procurement.statuses[("invoices", 1)] == (IntegrationStatus.ERROR, message)
+    # counted as a failure, not a quiet skip, so it shows up in the run summary too
+    assert [str(r.error) for r in report.failures] == [message]
+    assert not report.ok
 
 
 def test_duplicate_lookup_means_do_not_post(

@@ -109,7 +109,7 @@ class InvoiceSync:
             if not self.dry_run:
                 for result in report.results:
                     if result.action is SyncAction.SKIP and result.target is not None:
-                        self._settle_existing(result.source, result.target)
+                        self._settle_existing(result, result.target)
         return report
 
     def _existing(self, invoices: list[Invoice]) -> list[APInvoice]:
@@ -152,19 +152,21 @@ class InvoiceSync:
             "invoices", result.source.id, IntegrationStatus.ERROR, problem
         )
 
-    def _settle_existing(self, invoice: Invoice, existing: APInvoice) -> None:
+    def _settle_existing(self, result: SyncResult[Invoice, APInvoice], existing: APInvoice) -> None:
+        invoice = result.source
+        ours = existing.external_ref == invoice_ref(invoice.id)
+        if not ours and existing.total != invoice.total:
+            # Needs a person, so it counts as a failure in the report rather than a quiet skip.
+            result.error = P2PSyncError(
+                f"already in ERP as AP invoice {existing.invoice_id} with total {existing.total},"
+                f" procurement has {invoice.total}"
+            )
         try:
-            if existing.external_ref == invoice_ref(invoice.id):
+            if result.error is not None:
+                self._report_problem(result)
+            elif ours:
                 # we posted it on an earlier run but didn't get as far as marking it
                 self._mark_done(invoice, f"ERP AP invoice {existing.invoice_id}")
-            elif existing.total != invoice.total:
-                self.procurement.set_integration_status(
-                    "invoices",
-                    invoice.id,
-                    IntegrationStatus.ERROR,
-                    f"already in ERP as AP invoice {existing.invoice_id} with total {existing.total},"
-                    f" procurement has {invoice.total}",
-                )
             else:
                 self._mark_done(
                     invoice, f"already in ERP as AP invoice {existing.invoice_id} (keyed by hand)"
