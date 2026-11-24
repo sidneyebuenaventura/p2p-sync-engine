@@ -26,6 +26,9 @@ dependencies = [
     "tzdata; sys_platform == 'win32'",  # Windows ships without the IANA time zone database
 ]
 
+[project.scripts]
+p2p-sync = "p2p_sync.cli:main"
+
 [project.optional-dependencies]
 azure = [
     "azure-identity>=1.17",

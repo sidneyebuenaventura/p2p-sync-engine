@@ -72,5 +72,23 @@ def test_exposes_zoneinfo(monkeypatch: pytest.MonkeyPatch) -> None:
     assert Settings().tz.key == "Asia/Manila"
 
 
+def test_schedule_defaults_and_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("P2P_SCHEDULE__INVOICES", "0 */5 * * * *")
+    monkeypatch.setenv("P2P_ERP__DEFAULT_GL_ACCOUNT", "6000")
+
+    settings = Settings()
+
+    assert settings.schedule.suppliers == "0 * * * *"
+    assert settings.schedule.invoices == "0 */5 * * * *"
+    assert settings.erp.default_gl_account == "6000"
+
+
+def test_rejects_bad_cron_expression(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("P2P_SCHEDULE__SUPPLIERS", "every hour")
+
+    with pytest.raises(ValidationError, match="invalid cron expression: 'every hour'"):
+        Settings()
+
+
 def test_get_settings_is_cached() -> None:
     assert get_settings() is get_settings()

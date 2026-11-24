@@ -11,6 +11,7 @@ from functools import lru_cache
 from typing import Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from croniter import croniter
 from pydantic import BaseModel, Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -37,10 +38,26 @@ class ErpSettings(BaseModel):
     api_key: SecretStr = SecretStr("")
     username: str = ""
     password: SecretStr = SecretStr("")
+    # used for invoice lines that come through without an account code
+    default_gl_account: str | None = None
 
 
 class MaintenanceSettings(BaseModel):
     database_url: SecretStr = SecretStr("sqlite:///maintenance.db")
+
+
+class ScheduleSettings(BaseModel):
+    # cron expressions; six fields means seconds first, like Azure Functions timers
+    suppliers: str = "0 * * * *"
+    invoices: str = "*/15 * * * *"
+
+    @field_validator("suppliers", "invoices")
+    @classmethod
+    def _valid_cron(cls, value: str) -> str:
+        # fail at startup, not at the first run hours later
+        if not croniter.is_valid(value, second_at_beginning=len(value.split()) == 6):
+            raise ValueError(f"invalid cron expression: {value!r}")
+        return value
 
 
 class Settings(BaseSettings):
@@ -61,6 +78,7 @@ class Settings(BaseSettings):
     procurement: ProcurementSettings = ProcurementSettings()
     erp: ErpSettings = ErpSettings()
     maintenance: MaintenanceSettings = MaintenanceSettings()
+    schedule: ScheduleSettings = ScheduleSettings()
 
     @field_validator("log_level", mode="before")
     @classmethod
